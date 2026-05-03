@@ -5,7 +5,7 @@ const http = require("http");
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
-const RECIPIENT_EMAIL = process.env.RECIPIENT_EMAIL;
+const RECIPIENT_EMAIL = process.env.RECIPIENT_EMAIL; // must be your Resend account email on free tier
 
 const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
 const resend = new Resend(RESEND_API_KEY);
@@ -70,8 +70,8 @@ ${sectionsHTML}
 async function sendEmail(html, date) {
   console.log("📧 Sending via Resend...");
   const { data, error } = await resend.emails.send({
-    from: "AI Briefing <onboarding@resend.dev>",
-    to: RECIPIENT_EMAIL,
+    from: "onboarding@resend.dev",   // Resend's own test sender — works on free tier
+    to: [RECIPIENT_EMAIL],           // must be your Resend account email on free tier
     subject: `🤖 AI Briefing — ${date}`,
     html,
   });
