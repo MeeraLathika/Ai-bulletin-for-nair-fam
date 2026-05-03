@@ -35,7 +35,7 @@ async function generateBulletin() {
   });
 
   const response = await client.messages.create({
-    model: "claude-sonnet-4-20250514",
+    model: "claude-sonnet-4-5",
     max_tokens: 2000,
     system: BULLETIN_PROMPT,
     tools: [{ type: "web_search_20250305", name: "web_search" }],
