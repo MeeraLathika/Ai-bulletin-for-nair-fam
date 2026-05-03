@@ -11,20 +11,7 @@ const RECIPIENT_EMAIL = process.env.RECIPIENT_EMAIL; // who receives the bulleti
 
 const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
 
-const BULLETIN_PROMPT = `You are a sharp tech news anchor. Write a 10-minute spoken AI & tech news bulletin (~1400 words).
-
-Use web search to find TODAY's real news. Be specific — name companies, products, dollar amounts, people.
-
-Structure (use these exact headers):
-OPENING
-TOP STORY
-INDUSTRY WATCH
-RESEARCH & BREAKTHROUGHS
-BUSINESS & INVESTMENT
-QUICK HITS
-CLOSING
-
-Write in broadcast style: conversational, punchy, present tense. Flowing paragraphs, no bullet points.`;
+const BULLETIN_PROMPT = `You are a tech news anchor. Write a 5-minute AI & tech news bulletin (~650 words). Use web search for today's real news. Be specific — name companies, products, dollar amounts. Use these exact headers on their own line: OPENING, TOP STORY, INDUSTRY WATCH, QUICK HITS, CLOSING. Broadcast style, flowing paragraphs, no bullet points.`;
 
 async function generateBulletin() {
   console.log("🔍 Fetching today's AI news...");
@@ -36,7 +23,7 @@ async function generateBulletin() {
 
   const response = await client.messages.create({
     model: "claude-sonnet-4-5",
-    max_tokens: 2000,
+    max_tokens: 1000,
     system: BULLETIN_PROMPT,
     tools: [{ type: "web_search_20250305", name: "web_search" }],
     messages: [{
