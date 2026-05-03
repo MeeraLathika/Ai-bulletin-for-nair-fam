@@ -1,14 +1,11 @@
 {
   "name": "ai-bulletin",
   "version": "1.0.0",
-  "description": "Daily AI & tech news bulletin delivered by email at 7am AEST",
   "main": "index.js",
-  "scripts": {
-    "start": "node index.js"
-  },
+  "scripts": { "start": "node index.js" },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
     "node-cron": "^3.0.3",
-    "nodemailer": "^6.9.9"
+    "resend": "^3.2.0"
   }
 }
