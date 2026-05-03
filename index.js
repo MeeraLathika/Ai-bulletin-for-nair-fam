@@ -159,8 +159,17 @@ async function runBulletin() {
   }
 }
 
+// Keep Render happy — it expects an open port
+const http = require("http");
+const PORT = process.env.PORT || 3000;
+http.createServer((req, res) => {
+  res.writeHead(200);
+  res.end("AI Briefing scheduler is running.");
+}).listen(PORT, () => {
+  console.log(`✅ Health check server on port ${PORT}`);
+});
+
 // 7am AEST = 9pm UTC (UTC+10 for AEST)
-// Cron: minute hour * * * 
 console.log("🚀 AI Briefing scheduler started");
 console.log("⏰ Bulletin will send at 7:00am AEST (21:00 UTC) every day");
 
