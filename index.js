@@ -1,139 +1,82 @@
 const Anthropic = require("@anthropic-ai/sdk");
-const nodemailer = require("nodemailer");
+const { Resend } = require("resend");
 const cron = require("node-cron");
+const http = require("http");
 
-// ─── CONFIG (set these as environment variables on Render) ───────────────────
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
-const GMAIL_USER = process.env.GMAIL_USER;         // your Gmail address
-const GMAIL_APP_PASSWORD = process.env.GMAIL_APP_PASSWORD; // Gmail App Password
-const RECIPIENT_EMAIL = process.env.RECIPIENT_EMAIL; // who receives the bulletin
-// ─────────────────────────────────────────────────────────────────────────────
+const RESEND_API_KEY = process.env.RESEND_API_KEY;
+const RECIPIENT_EMAIL = process.env.RECIPIENT_EMAIL;
 
 const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
+const resend = new Resend(RESEND_API_KEY);
 
 const BULLETIN_PROMPT = `You are a tech news anchor. Write a 5-minute AI & tech news bulletin (~650 words). Use web search for today's real news. Be specific — name companies, products, dollar amounts. Use these exact headers on their own line: OPENING, TOP STORY, INDUSTRY WATCH, QUICK HITS, CLOSING. Broadcast style, flowing paragraphs, no bullet points.`;
 
 async function generateBulletin() {
   console.log("🔍 Fetching today's AI news...");
-
   const today = new Date().toLocaleDateString("en-AU", {
     weekday: "long", year: "numeric", month: "long", day: "numeric",
     timeZone: "Australia/Sydney"
   });
-
   const response = await client.messages.create({
     model: "claude-sonnet-4-5",
     max_tokens: 1000,
     system: BULLETIN_PROMPT,
     tools: [{ type: "web_search_20250305", name: "web_search" }],
-    messages: [{
-      role: "user",
-      content: `Today is ${today} (AEST). Generate a full 10-minute AI & tech news bulletin with today's real, current news. Search for stories from the past 24-48 hours.`
-    }]
+    messages: [{ role: "user", content: `Today is ${today} (AEST). Generate a 5-minute AI & tech news bulletin with today's real news from the past 24-48 hours.` }]
   });
-
-  const text = response.content
-    .filter(b => b.type === "text")
-    .map(b => b.text)
-    .join("\n");
-
-  console.log("✅ Bulletin generated successfully");
+  const text = response.content.filter(b => b.type === "text").map(b => b.text).join("\n");
+  console.log("✅ Bulletin generated");
   return { text, date: today };
 }
 
 function formatEmailHTML(text, date) {
-  const SECTION_COLORS = {
-    "OPENING": "#00c96e",
-    "TOP STORY": "#ff4444",
-    "INDUSTRY WATCH": "#4488ff",
-    "RESEARCH & BREAKTHROUGHS": "#cc44ff",
-    "BUSINESS & INVESTMENT": "#ffaa00",
-    "QUICK HITS": "#00ccee",
-    "CLOSING": "#00c96e",
-  };
-
-  const SECTIONS = ["OPENING","TOP STORY","INDUSTRY WATCH","RESEARCH & BREAKTHROUGHS","BUSINESS & INVESTMENT","QUICK HITS","CLOSING"];
-
-  // Parse into sections
+  const COLORS = { "OPENING":"#00c96e","TOP STORY":"#ff4444","INDUSTRY WATCH":"#4488ff","QUICK HITS":"#00ccee","CLOSING":"#00c96e" };
+  const SECTIONS = ["OPENING","TOP STORY","INDUSTRY WATCH","QUICK HITS","CLOSING"];
   const sections = [];
-  let currentSection = null;
-  let currentContent = [];
+  let cur = null, content = [];
   for (const line of text.split("\n")) {
-    const trimmed = line.trim();
-    const matched = SECTIONS.find(s => trimmed === s || trimmed.startsWith(s + ":"));
-    if (matched) {
-      if (currentSection) sections.push({ title: currentSection, content: currentContent.join("\n").trim() });
-      currentSection = matched;
-      currentContent = [];
-    } else if (currentSection) {
-      currentContent.push(line);
-    }
+    const t = line.trim();
+    const m = SECTIONS.find(s => t === s || t.startsWith(s + ":"));
+    if (m) { if (cur) sections.push({ title: cur, content: content.join("\n").trim() }); cur = m; content = []; }
+    else if (cur) content.push(line);
   }
-  if (currentSection) sections.push({ title: currentSection, content: currentContent.join("\n").trim() });
+  if (cur) sections.push({ title: cur, content: content.join("\n").trim() });
 
   const sectionsHTML = sections.map(sec => {
-    const color = SECTION_COLORS[sec.title] || "#00c96e";
-    const paragraphs = sec.content.split(/\n\n+/).filter(Boolean)
-      .map(p => `<p style="margin:0 0 16px 0;line-height:1.8;color:#c8d8e8;">${p.replace(/\n/g, " ")}</p>`)
-      .join("");
-
-    return `
-      <div style="margin-bottom:40px;padding:28px;background:#0d1923;border-radius:4px;border-left:4px solid ${color};">
-        <div style="font-family:'Courier New',monospace;font-size:10px;letter-spacing:4px;color:${color};margin-bottom:16px;text-transform:uppercase;">${sec.title}</div>
-        <div style="font-family:Georgia,serif;font-size:15px;">${paragraphs}</div>
-      </div>`;
+    const color = COLORS[sec.title] || "#00c96e";
+    const paras = sec.content.split(/\n\n+/).filter(Boolean)
+      .map(p => `<p style="margin:0 0 14px 0;line-height:1.8;color:#333;">${p.replace(/\n/g," ")}</p>`).join("");
+    return `<div style="margin-bottom:28px;padding:22px;background:#f9f9f9;border-radius:4px;border-left:4px solid ${color};">
+      <div style="font-family:monospace;font-size:10px;letter-spacing:4px;color:${color};margin-bottom:12px;">${sec.title}</div>
+      <div style="font-family:Georgia,serif;font-size:15px;">${paras}</div></div>`;
   }).join("");
 
-  const wordCount = text.split(/\s+/).length;
-  const readMins = Math.round(wordCount / 130);
-
-  return `
-<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:0;background:#080c10;font-family:Georgia,serif;">
-  <div style="max-width:680px;margin:0 auto;padding:32px 20px;">
-
-    <!-- Header -->
-    <div style="border-bottom:1px solid #1e3a5f;padding-bottom:24px;margin-bottom:32px;">
-      <div style="display:inline-block;background:#ff4444;color:white;font-family:'Courier New',monospace;font-size:10px;letter-spacing:3px;padding:4px 10px;margin-bottom:12px;">DAILY BRIEFING</div>
-      <h1 style="margin:0 0 8px 0;font-family:'Courier New',monospace;font-size:28px;letter-spacing:8px;color:#00c96e;font-weight:normal;">AI BRIEFING</h1>
-      <div style="font-family:'Courier New',monospace;font-size:11px;color:#4a6a8a;letter-spacing:2px;">${date.toUpperCase()}</div>
-      <div style="font-family:'Courier New',monospace;font-size:10px;color:#2a4a6a;margin-top:6px;">~${readMins} MIN READ · ${wordCount} WORDS · ${sections.length} SEGMENTS</div>
-    </div>
-
-    <!-- Sections -->
-    ${sectionsHTML}
-
-    <!-- Footer -->
-    <div style="border-top:1px solid #1e3a5f;padding-top:20px;font-family:'Courier New',monospace;font-size:10px;color:#2a4a6a;letter-spacing:2px;text-align:center;">
-      GENERATED BY AI BRIEFING · POWERED BY CLAUDE · DELIVERED 7AM AEST
-    </div>
-
-  </div>
-</body>
-</html>`;
+  const wc = text.split(/\s+/).length;
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f0f0f0;">
+<div style="max-width:640px;margin:0 auto;padding:24px 16px;">
+<div style="background:white;border-radius:8px;padding:28px;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+<div style="border-bottom:2px solid #eee;padding-bottom:18px;margin-bottom:24px;">
+<div style="display:inline-block;background:#ff4444;color:white;font-family:monospace;font-size:10px;letter-spacing:3px;padding:3px 9px;margin-bottom:8px;">DAILY BRIEFING</div>
+<h1 style="margin:0 0 5px 0;font-family:monospace;font-size:24px;letter-spacing:5px;color:#111;font-weight:normal;">AI BRIEFING</h1>
+<div style="font-family:monospace;font-size:11px;color:#888;">${date.toUpperCase()}</div>
+<div style="font-family:monospace;font-size:10px;color:#bbb;margin-top:3px;">~${Math.round(wc/130)} MIN READ</div></div>
+${sectionsHTML}
+<div style="border-top:1px solid #eee;padding-top:14px;font-family:monospace;font-size:10px;color:#ccc;text-align:center;letter-spacing:2px;">AI BRIEFING · POWERED BY CLAUDE · 7AM AEST</div>
+</div></div></body></html>`;
 }
 
 async function sendEmail(html, date) {
-  console.log("📧 Sending email...");
-
-  const transporter = nodemailer.createTransport({
-    service: "gmail",
-    auth: {
-      user: GMAIL_USER,
-      pass: GMAIL_APP_PASSWORD,
-    },
-  });
-
-  await transporter.sendMail({
-    from: `"AI Briefing" <${GMAIL_USER}>`,
+  console.log("📧 Sending via Resend...");
+  const { data, error } = await resend.emails.send({
+    from: "AI Briefing <onboarding@resend.dev>",
     to: RECIPIENT_EMAIL,
     subject: `🤖 AI Briefing — ${date}`,
     html,
   });
-
-  console.log(`✅ Email sent to ${RECIPIENT_EMAIL}`);
+  if (error) throw new Error(JSON.stringify(error));
+  console.log(`✅ Email sent! ID: ${data.id}`);
 }
 
 async function runBulletin() {
@@ -146,27 +89,16 @@ async function runBulletin() {
   }
 }
 
-// Keep Render happy — it expects an open port
-const http = require("http");
 const PORT = process.env.PORT || 3000;
-http.createServer((req, res) => {
-  res.writeHead(200);
-  res.end("AI Briefing scheduler is running.");
-}).listen(PORT, () => {
-  console.log(`✅ Health check server on port ${PORT}`);
-});
+http.createServer((req, res) => { res.writeHead(200); res.end("AI Briefing running."); })
+  .listen(PORT, () => console.log(`✅ Health check on port ${PORT}`));
 
-// 7am AEST = 9pm UTC (UTC+10 for AEST)
 console.log("🚀 AI Briefing scheduler started");
-console.log("⏰ Bulletin will send at 7:00am AEST (21:00 UTC) every day");
+console.log("⏰ Sends at 7:00am AEST (21:00 UTC) daily");
 
-cron.schedule("0 21 * * *", () => {
-  console.log("⏰ Cron triggered — generating bulletin...");
-  runBulletin();
-}, { timezone: "UTC" });
+cron.schedule("0 21 * * *", () => { console.log("⏰ Cron fired"); runBulletin(); }, { timezone: "UTC" });
 
-// Also run immediately on startup so you can test it right away
 if (process.env.RUN_ON_START === "true") {
-  console.log("🧪 RUN_ON_START enabled — sending test bulletin now...");
+  console.log("🧪 Test run starting...");
   runBulletin();
 }
