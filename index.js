@@ -1,7 +1,5 @@
 const Anthropic = require("@anthropic-ai/sdk");
 const { Resend } = require("resend");
-const cron = require("node-cron");
-const http = require("http");
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
@@ -48,7 +46,6 @@ function formatEmailHTML(text, date) {
 
   let html = text;
 
-  // Replace **SECTION** markers with styled HTML blocks
   Object.entries(COLORS).forEach(([label, color]) => {
     const regex = new RegExp(`\\*\\*${label}\\*\\*`, 'gi');
     html = html.replace(regex,
@@ -57,7 +54,6 @@ function formatEmailHTML(text, date) {
     );
   });
 
-  // Convert paragraphs and markdown links
   html = html.split(/\n\n+/).map(para => {
     para = para.trim();
     if (!para) return "";
@@ -100,26 +96,19 @@ async function sendEmail(html, date) {
   console.log("Email sent! ID:", data.id);
 }
 
-async function runBulletin() {
+// Run once and exit — designed for Render Cron Job
+async function main() {
+  console.log("=== AI Briefing starting ===");
   try {
     const { text, date } = await generateBulletin();
     const html = formatEmailHTML(text, date);
     await sendEmail(html, date);
+    console.log("=== Done! Exiting. ===");
+    process.exit(0);
   } catch (err) {
-    console.error("Error:", err.message);
+    console.error("=== Failed:", err.message, "===");
+    process.exit(1);
   }
 }
 
-const PORT = process.env.PORT || 3000;
-http.createServer((req, res) => { res.writeHead(200); res.end("AI Briefing running."); })
-  .listen(PORT, () => console.log("Health check on port", PORT));
-
-console.log("AI Briefing scheduler started");
-console.log("Sends at 7:00am AEST (21:00 UTC) daily");
-
-cron.schedule("0 21 * * *", () => { console.log("Cron fired"); runBulletin(); }, { timezone: "UTC" });
-
-if (process.env.RUN_ON_START === "true") {
-  console.log("Test run starting...");
-  runBulletin();
-}
+main();
