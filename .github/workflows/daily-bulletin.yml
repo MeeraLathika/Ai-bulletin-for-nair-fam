@@ -1,0 +1,26 @@
+name: Daily AI Bulletin
+
+on:
+  schedule:
+    - cron: "0 21 * * *" # 7am AEST (21:00 UTC)
+  workflow_dispatch: # allows manual trigger from GitHub UI
+
+jobs:
+  send-bulletin:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run bulletin
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          RECIPIENT_EMAIL: ${{ secrets.RECIPIENT_EMAIL }}
+        run: node index.js
