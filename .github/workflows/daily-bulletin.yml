@@ -2,7 +2,7 @@ name: Daily AI Bulletin
 
 on:
   schedule:
-  - cron: '45 10 * * *'  # 8:45pm AEST (10:45 UTC)
+  - cron: '35 10 * * *'  # 8:45pm AEST (10:45 UTC)
    # - cron: "0 21 * * *" # 7am AEST (21:00 UTC)
   workflow_dispatch: # allows manual trigger from GitHub UI
 
